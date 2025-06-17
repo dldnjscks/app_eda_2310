@@ -198,17 +198,17 @@ class Logout:
 # ---------------------
 class EDA:
     def __init__(self):
+        import io  # ensure io is available
         st.title("📊 Population Trends EDA")
 
         # 1) CSV 업로드
-        uploaded = st.file_uploader("Upload population_trends.csv", type="csv")
+        uploaded = st.file_uploader("population_trends.csv 파일 업로드", type="csv")
         if not uploaded:
-            st.info("Please upload **population_trends.csv**")
+            st.info("population_trends.csv 파일을 업로드 해주세요.")
             return
 
         # 2) 기본 전처리
         df = pd.read_csv(uploaded)
-        # ‘세종’ 지역의 '-' → 0, 숫자형으로 변환
         mask_sejong = df['지역'] == '세종'
         df.loc[mask_sejong, ['인구','출생아수(명)','사망자수(명)']] = \
             df.loc[mask_sejong, ['인구','출생아수(명)','사망자수(명)']].replace('-', 0)
@@ -230,10 +230,8 @@ class EDA:
             buf = io.StringIO()
             df.info(buf=buf)
             st.text(buf.getvalue())
-
             st.subheader("Descriptive Statistics")
             st.dataframe(df.describe())
-
             st.subheader("Missing & Duplicates")
             st.write(df.isnull().sum())
             st.write(f"- Duplicates: {df.duplicated().sum()} rows")
@@ -243,18 +241,16 @@ class EDA:
             st.header("📈 Yearly Population Trend")
             df_nation = df[df['지역'] == '전국'].sort_values('연도')
 
-            # 실제 추이
             fig, ax = plt.subplots()
             ax.plot(df_nation['연도'], df_nation['인구'], marker='o', label='Actual')
 
-            # 최근 3년 net change로 2035년 예측
             last3 = df_nation.tail(3).copy()
             last3['net_change'] = last3['출생아수(명)'] - last3['사망자수(명)']
             avg_net = last3['net_change'].mean()
 
             last_year = int(df_nation['연도'].max())
             last_pop  = float(df_nation.loc[df_nation['연도'] == last_year, '인구'])
-            years_pred = list(range(last_year+1, 2036))
+            years_pred = list(range(last_year + 1, 2036))
             pop_pred   = [last_pop + avg_net * (y - last_year) for y in years_pred]
 
             ax.plot(years_pred, pop_pred, linestyle='--', marker='x', label='Projected to 2035')
@@ -274,8 +270,7 @@ class EDA:
             prev_year = last_year - 5
 
             df_recent = df[df['연도'].isin([prev_year, last_year])]
-            pivot = df_recent.pivot(index='지역', columns='연도', values='인구') \
-                             .drop('전국', errors='ignore')
+            pivot = df_recent.pivot(index='지역', columns='연도', values='인구').drop('전국', errors='ignore')
             pivot['change'] = pivot[last_year] - pivot[prev_year]
             pivot['pct_change'] = (pivot['change'] / pivot[prev_year]) * 100
 
@@ -290,11 +285,7 @@ class EDA:
 
             # 5-year absolute change
             fig, ax = plt.subplots()
-            sns.barplot(
-                x=pivot['change'].values / 1_000,
-                y=pivot.index,
-                ax=ax
-            )
+            sns.barplot(x=pivot['change'].values / 1_000, y=pivot.index, ax=ax)
             ax.set_title("5-Year Population Change")
             ax.set_xlabel("Change (thousands)")
             ax.set_ylabel("Region")
@@ -305,11 +296,7 @@ class EDA:
 
             # 5-year percent change
             fig, ax = plt.subplots()
-            sns.barplot(
-                x=pivot['pct_change'].values,
-                y=pivot.index,
-                ax=ax
-            )
+            sns.barplot(x=pivot['pct_change'].values, y=pivot.index, ax=ax)
             ax.set_title("5-Year Population % Change")
             ax.set_xlabel("Percentage Change")
             ax.set_ylabel("")
@@ -318,26 +305,29 @@ class EDA:
             st.pyplot(fig)
             st.markdown("> *Relative % change over last 5 years.*")
 
-        # ── 탭4: 증감률 상위 100개 사례
+        # ── 탭4: 증감률 상위 100개 사례 (수정됨)
         with tabs[3]:
             st.header("🔍 Top 100 Yearly Population Diffs")
             df_diff = df.copy()
             df_diff['diff'] = df_diff.groupby('지역')['인구'].diff()
             df_diff = df_diff[df_diff['지역'] != '전국']
-            top100 = df_diff.nlargest(100, 'diff')[['지역','연도','diff']].reset_index(drop=True)
-            top100['diff'] = top100['diff'].map(lambda x: f"{int(x):,}")
 
+            top100 = df_diff.nlargest(100, 'diff')[['지역', '연도', 'diff']] \
+                          .reset_index(drop=True)
+
+            # diff 컬럼은 숫자형으로 유지하고, 스타일링 후 포맷팅
             styled = top100.style.background_gradient(
                 subset=['diff'],
-                cmap=['Reds_r','Blues'],
-                axis=0
-            )
+                cmap='bwr_r'
+            ).format({'diff': '{:,.0f}'})
+
             st.dataframe(styled)
 
         # ── 탭5: 누적 영역 그래프
         with tabs[4]:
             st.header("🌐 Stacked Area Plot")
             df_area = df[df['지역'] != '전국']
+            # reuse region_map from 탭3
             pivot_area = df_area.pivot(index='연도', columns='지역', values='인구') \
                                  .rename(columns=region_map)
             fig, ax = plt.subplots()
